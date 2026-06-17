@@ -9,7 +9,8 @@ import { redirectRouter } from "./routes/redirect.js";
 const allowedOrigins = new Set([
   config.clientOrigin,
   "http://localhost:5173",
-  "http://127.0.0.1:5173"
+  "http://127.0.0.1:5173",
+  "https://prismatic-licorice-8e239c.netlify.app"
 ]);
 
 export function createApp() {
@@ -31,8 +32,9 @@ export function createApp() {
               parsed.hostname === "127.0.0.1" ||
               parsed.hostname.startsWith("192.168.") ||
               parsed.hostname.startsWith("172."));
+          const isNetlifyApp = parsed.protocol === "https:" && parsed.hostname.endsWith(".netlify.app");
 
-          callback(null, allowedOrigins.has(origin) || isLocalVite);
+          callback(null, allowedOrigins.has(origin) || isLocalVite || isNetlifyApp);
         } catch {
           callback(null, false);
         }
