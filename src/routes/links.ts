@@ -1,4 +1,5 @@
 import { Router } from "express";
+import type { Request } from "express";
 import mongoose from "mongoose";
 
 import { ApiError, notFound } from "../errors.js";
@@ -21,7 +22,7 @@ router.post("/", async (request, response, next) => {
 
       try {
         const link = await Link.create({ code, originalUrl });
-        return response.status(201).json(formatLink(link));
+        return response.status(201).json(formatLink(link, getPublicBaseUrl(request)));
       } catch (error) {
         if (isDuplicateKey(error)) {
           if (alias) {
@@ -41,11 +42,12 @@ router.post("/", async (request, response, next) => {
   }
 });
 
-router.get("/", async (_request, response, next) => {
+router.get("/", async (request, response, next) => {
   try {
     const links = await Link.find().sort({ createdAt: -1 }).limit(100).lean();
+    const publicBaseUrl = getPublicBaseUrl(request);
     response.json({
-      links: links.map(formatLink)
+      links: links.map((link) => formatLink(link, publicBaseUrl))
     });
   } catch (error) {
     next(error);
@@ -85,7 +87,7 @@ router.get("/:code/analytics", async (request, response, next) => {
     ]);
 
     response.json({
-      link: formatLink(link),
+      link: formatLink(link, getPublicBaseUrl(request)),
       analytics: {
         totalClicks: link.clickCount,
         daily: daily.map((item) => ({ date: item._id, clicks: item.clicks })),
@@ -103,14 +105,27 @@ function formatLink(link: {
   originalUrl: string;
   clickCount: number;
   createdAt: Date;
-}) {
+}, publicBaseUrl: string) {
   return {
     code: link.code,
     originalUrl: link.originalUrl,
-    shortUrl: `${config.publicBaseUrl}/${link.code}`,
+    shortUrl: `${publicBaseUrl}/${link.code}`,
     clickCount: link.clickCount,
     createdAt: link.createdAt
   };
+}
+
+function getPublicBaseUrl(request: Request) {
+  if (!config.publicBaseUrl.includes("localhost")) {
+    return config.publicBaseUrl;
+  }
+
+  const forwardedHost = request.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const host = forwardedHost || request.get("host");
+  const forwardedProto = request.get("x-forwarded-proto")?.split(",")[0]?.trim();
+  const protocol = forwardedProto || request.protocol;
+
+  return `${protocol}://${host}`.replace(/\/$/, "");
 }
 
 function isDuplicateKey(error: unknown) {
